@@ -1,0 +1,217 @@
+<html>
+  <head>
+    <style>
+      #logo {
+        position: relative;
+        top: -340px;
+      }
+      #logo img {
+        width: 100px;
+      }
+      #myCanvas {
+        /* filter: drop-shadow(1px 1px 5px #000099); */
+      }
+    </style>
+  </head>
+  <body height="100%" width="100%" style="text-align: center; background-color: #FFF;">
+    <canvas id="myCanvas" width="800" height="600">
+    </canvas>
+    <div id="logo">
+      <img src="https://s3-us-west-1.amazonaws.com/asteria-web-nathan/illustrations/device_ai.png">
+    </div>
+    <script>
+      var c = document.getElementById("myCanvas");
+      var ctx = c.getContext("2d");
+      var raf;
+      var global_loci = [];
+      var circle_array;
+      var dot_array;
+
+      var MAX_CIRCLES = 3000;
+      var INIT_CANVAS_DIMENSIONS = get_canvas_dimensions();
+      var MAX_CIRCLE_RADIUS = INIT_CANVAS_DIMENSIONS[0]/6;
+      var MIN_CIRCLE_RADIUS = INIT_CANVAS_DIMENSIONS[0]/48;
+
+      var MAX_DOT_RADIUS = 8;
+      var MIN_DOT_RADIUS = 2;
+
+      var MAX_DOT_SPEED = 3000;
+      var MIN_DOT_SPEED = 200;
+
+      var MAX_GLOBAL_RADIUS = MAX_CIRCLE_RADIUS*3;
+
+      var DEBUG_SHOW_CENTER_LINE=0;
+      var DEBUG_SHOW_ELLIPSE=0;
+
+      var INVERT_DOT_SIZE=1;
+
+      function get_canvas_dimensions() {
+        var sizeWidth = ctx.canvas.clientWidth;
+        var sizeHeight = ctx.canvas.clientHeight;
+        return [sizeWidth, sizeHeight];
+      }
+
+      function get_loci() {
+        if(global_loci.length == 0) {
+          var dim = get_canvas_dimensions();
+          // returns center of canvas;
+          return [dim[0]/2, dim[1]/2];
+        } else {
+          return global_loci;
+        }
+      }
+
+      function circle_factory(x, y, radius) {
+        var circle = {
+          x: x,
+          y: y,
+          radius: radius,
+          draw: function() {
+            if(DEBUG_SHOW_ELLIPSE) {
+              ctx.beginPath();
+              ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2, true);
+              ctx.strokeStyle = "black";
+              // show stroke
+              ctx.stroke();
+            }
+          }
+        }
+        return circle;
+      }
+
+      function draw_circles_through_loci() {
+        var loci = get_loci();
+
+        var circle_array = [];
+        for(var i=0; i< MAX_CIRCLES; i++) {
+
+          var rand_radius = Math.floor((Math.random() * MAX_CIRCLE_RADIUS) + MIN_CIRCLE_RADIUS);
+          var rand_radian = (Math.random() * Math.PI * 2);
+
+          var y = loci[1] + rand_radius * Math.sin(rand_radian);
+          var x = loci[0] + rand_radius * Math.cos(rand_radian);
+
+          var circle = circle_factory(x, y, rand_radius);
+          circle.draw();
+          circle_array.push(circle);
+        }
+        return circle_array;
+      }
+
+      function dot_factory(x, y, radius, radian, direction, speed) {
+         var dot = {
+          x: x,
+          y: y,
+          radius: radius,
+          max_radius: radius,
+          radian: radian,
+          direction: direction,
+          speed: speed,
+          color: 'white',
+          opacity: Math.random()+.1,
+          draw: function() {
+            //this.opacity = this.radius/MAX_DOT_RADIUS;
+
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2, true);
+            ctx.closePath();
+            ctx.fillStyle = "rgba(93, 97, 140, " + this.opacity + ")"; 
+            ctx.fill();
+            //ctx.filter = "blur(0px)";
+            //ctx.filter = "drop-shadow(3px 3px 3px #000)";
+          }
+        }
+        return dot;
+      }
+
+      function draw_dots_on_circles(circle_array) {
+        var dot_array = [];
+
+        for(var i=0; i<circle_array.length; i++) {
+          var circle = circle_array[i];
+          var rand_radian = (Math.random() * Math.PI * 2);
+          var rand_radius = (Math.random() * MAX_DOT_RADIUS) + MIN_DOT_RADIUS;
+
+          var y = circle.radius * Math.sin(rand_radian) + circle.y
+          var x = circle.radius * Math.cos(rand_radian) + circle.x
+
+          // 1: Forward, -1: Backwards
+          var direction = Math.round(Math.random()) == 1 ? 1 : -1;
+
+          var speed = (Math.PI * 2)/(Math.random()*MAX_DOT_SPEED + MIN_DOT_SPEED);
+
+          var dot = dot_factory(x, y, rand_radius, rand_radian, direction, speed);
+          circle.dot = dot;
+          dot_array.push(dot);
+          dot.draw();
+        }
+        return dot_array;
+      }
+
+      function draw_scene() {
+        ctx.clearRect(0,0, c.width, c.height);
+        circle_array.forEach(function(circle) { 
+          circle.draw();
+
+          // Move that dot
+          var new_radian = circle.dot.radian + circle.dot.speed * circle.dot.direction;
+
+          circle.dot.y = circle.y + circle.radius * Math.sin(new_radian);
+          circle.dot.x = circle.x + circle.radius * Math.cos(new_radian);
+          circle.dot.radian = new_radian;
+
+          // Resize that dot
+                              // max size is old radius + this number should be between 0 and 1
+          var loci = get_loci();
+          var dot_distance_from_loci = Math.abs(Math.sqrt((Math.pow(loci[0]-circle.dot.x, 2))+(Math.pow(loci[1]-circle.dot.y,2))));
+          circle.dot.radius = (circle.dot.max_radius * (INVERT_DOT_SIZE-Math.abs(dot_distance_from_loci/MAX_GLOBAL_RADIUS)));
+
+
+          // Draw that dot
+          circle.dot.draw();
+
+          if(DEBUG_SHOW_CENTER_LINE) {
+          // Show dot to center of ellipse
+            ctx.beginPath();
+            ctx.moveTo(circle.x,circle.y);
+            ctx.lineTo(circle.dot.x, circle.dot.y);
+            ctx.strokeStyle="rgba(255, 50, 54, 0.97)";
+            ctx.stroke();
+          }
+        });
+        raf = window.requestAnimationFrame(draw_scene);
+      }
+
+      c.addEventListener('2mouseover', function(e) {
+        raf = window.requestAnimationFrame(draw_scene);
+      });
+
+      c.addEventListener('2mouseout', function(e) {
+        window.cancelAnimationFrame(raf);
+      });
+
+
+      c.addEventListener('2mouseup', function(e) {
+        var rect = c.getBoundingClientRect();
+        var x = event.clientX - rect.left;
+        var y = event.clientY - rect.top;
+        console.log("x: " + x + " y: " + y);
+        global_loci = [x, y];
+        start();
+        window.cancelAnimationFrame(raf);
+        raf = window.requestAnimationFrame(draw_scene);
+      });
+
+
+      function start() {
+        circle_array = draw_circles_through_loci();
+        dot_array = draw_dots_on_circles(circle_array);
+      };
+
+      start();
+      raf = window.requestAnimationFrame(draw_scene);
+
+
+    </script>
+  </body>
+</html>
